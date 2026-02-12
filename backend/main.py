@@ -1,11 +1,8 @@
-import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()
+from openai import OpenAI, RateLimitError
+import os
 
 app = FastAPI()
 
@@ -24,24 +21,31 @@ class PromptRequest(BaseModel):
 
 @app.post("/analyze")
 def analyze(request: PromptRequest):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a professional AI assistant that analyzes text and provides clear insights."
-            },
-            {
-                "role": "user",
-                "content": request.text
-            }
-        ],
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": request.text}],
+        )
 
-    return {
-        "analysis": response.choices[0].message.content
-    }
+        return {
+            "analysis": response.choices[0].message.content,
+            "source": "openai"
+        }
+
+    except RateLimitError:
+        # 👇 MOCK automático
+        return {
+            "analysis": f"(Mocked response) You asked: {request.text}",
+            "source": "mock"
+        }
+
+    except Exception as e:
+        return {
+            "analysis": f"Unexpected error: {str(e)}",
+            "source": "error"
+        }
 
 @app.get("/")
 def root():
     return {"message": "Backend is running"}
+
